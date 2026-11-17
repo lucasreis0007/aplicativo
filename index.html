@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#4a7bd0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Minha Central">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="assets/icons/icon-180.png">
+<link rel="stylesheet" href="css/themes.css">
+<link rel="stylesheet" href="css/styles.css">
+<title>Minha Central</title></head>
+<body>
+<main id="view"></main>
+<button id="fab" data-a="add" aria-label="Adicionar">+</button>
+<nav id="nav">
+<button data-a="nav" data-v="home"><i>⌂</i>Início</button>
+<button data-a="nav" data-v="cal"><i>▦</i>Calendário</button>
+<button data-a="nav" data-v="tasks"><i>✓</i>Tarefas</button>
+<button data-a="nav" data-v="routines"><i>↻</i>Rotinas</button>
+<button data-a="nav" data-v="me"><i>◉</i>Perfil</button>
+</nav>
+<div id="sheet" hidden><div class="back" data-a="close"></div><div class="panel" id="panel"></div></div>
+<div id="toast" hidden></div>
+<script src="js/database.js"></script>
+<script src="js/app.js"></script>
+</body></html>
