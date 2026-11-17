@@ -23,7 +23,7 @@ const fromMin=m=>pad(Math.floor(m/60))+':'+pad(m%60);
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const find=(a,id)=>a.find(x=>x.id===id);
 const fmtD=s=>{const d=new Date(s+'T12:00');return `${DAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()].slice(0,3)}`};
-const S={tasks:[],events:[],routines:[],cats:DEFCATS,tab:'home',cal:{mode:'month',date:today()},f:{q:'',st:'todas'}};
+const S={tasks:[],events:[],routines:[],goals:[],subjects:[],sessions:[],finance:[],cats:DEFCATS,tab:'home',cal:{mode:'month',date:today()},f:{q:'',st:'todas'}};
 
 /* ---------- tema ---------- */
 const mq=matchMedia('(prefers-color-scheme: dark)');
@@ -33,7 +33,7 @@ mq.addEventListener('change',applyTheme);applyTheme();
 
 /* ---------- dados ---------- */
 async function load(){
- S.tasks=await DB.all('tasks');S.events=await DB.all('events');S.routines=await DB.all('routines');
+ S.tasks=await DB.all('tasks');S.events=await DB.all('events');S.routines=await DB.all('routines');S.goals=await DB.all('goals');S.subjects=await DB.all('subjects');S.sessions=await DB.all('sessions');S.finance=await DB.all('finance');
  const c=await DB.get('settings','cats');
  if(c)S.cats=c.value;else await DB.put('settings',{key:'cats',value:DEFCATS});
 }
@@ -104,6 +104,7 @@ function taskForm(t={}){
  <div class="two"><div><label class="l">Duração (min)</label><input type="number" min="0" name="dur" value="${t.dur||''}"></div><div><label class="l">Prazo</label><input type="date" name="deadline" value="${t.deadline||''}"></div></div>
  <div class="two"><div><label class="l">Prioridade</label><select name="prio">${Object.keys(PL).map(p=>`<option value="${p}" ${(t.prio||'media')===p?'selected':''}>${PL[p]}</option>`).join('')}</select></div>
  <div><label class="l">Status</label><select name="status">${['pendente','andamento','concluida','cancelada'].map(s=>`<option value="${s}" ${(t.status||'pendente')===s?'selected':''}>${STL[s]}</option>`).join('')}</select></div></div>
+ <label class="l">Meta relacionada</label><select name="goal"><option value="">Nenhuma</option>${(S.goals||[]).map(g=>`<option value="${g.id}" ${t.goal===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}</select>
  <label class="l">Subtarefas (uma por linha)</label><textarea name="subs" rows="3">${esc((t.subs||[]).map(s=>s.t).join('\n'))}</textarea></form>
  <button class="btn" data-a="saveTask" data-id="${t.id||''}">Salvar</button><button class="btn sec" data-a="close">Cancelar</button>`);
 }
@@ -145,7 +146,7 @@ function meV(){const m=localStorage.getItem('theme')||'auto';
  return `<h1>Perfil</h1><h2>Aparência</h2><div class="seg">${[['light','Claro'],['dark','Escuro'],['auto','Automático']].map(([v,l])=>`<button class="${m===v?'on':''}" data-a="theme" data-v="${v}">${l}</button>`).join('')}</div>
  <h2>Categorias</h2>${Object.entries(S.cats).map(([g,l])=>`<div class="card"><b>${esc(g)}</b><div>${l.map(c=>`<span class="chip">${esc(c)}<b data-a="delCat" data-g="${esc(g)}" data-c="${esc(c)}">×</b></span>`).join('')}</div></div>`).join('')}
  <div class="two"><select id="cg">${Object.keys(S.cats).map(g=>`<option>${esc(g)}</option>`).join('')}</select><input id="cn" placeholder="Nova categoria"></div><button class="btn sec" data-a="addCat">Adicionar categoria</button>
- <h2>Sobre</h2><div class="card meta">Seus dados ficam apenas neste aparelho (IndexedDB). Estudos, metas, relatórios, foco e "Organizar meu dia" chegam na próxima etapa.</div>`}
+ <h2>Sobre</h2><div class="card meta">Seus dados ficam apenas neste aparelho (IndexedDB). Estudos, metas, relatórios, foco e "Organizar meu dia" estão na seção "Mais" acima.</div>`}
 
 /* ---------- ações ---------- */
 const refresh=async()=>{await load();render()};
@@ -162,10 +163,10 @@ const A={
   if(f.deadline&&f.date&&f.deadline<f.date)return toast('O prazo não pode ser anterior à data.');
   const old=find(S.tasks,b.dataset.id)||{};
   const subs=f.subs.split('\n').map(x=>x.trim()).filter(Boolean).map(x=>({t:x,d:!!(old.subs||[]).find(s=>s.t===x&&s.d)}));
-  await DB.put('tasks',{...old,id:old.id||uid(),name:f.name.trim(),desc:f.desc.trim(),cat:f.cat,date:f.date,time:f.time,dur:f.dur?+f.dur:0,deadline:f.deadline,prio:f.prio,status:f.status,subs});
+  await DB.put('tasks',{...old,id:old.id||uid(),name:f.name.trim(),desc:f.desc.trim(),cat:f.cat,date:f.date,time:f.time,dur:f.dur?+f.dur:0,deadline:f.deadline,prio:f.prio,status:f.status,goal:f.goal||'',doneAt:f.status==='concluida'?(old.doneAt||today()):'',subs});
   closeSheet();await refresh();toast('Tarefa salva.');
  },
- toggle:async b=>{const t=find(S.tasks,b.dataset.id);t.status=t.status==='concluida'?'pendente':'concluida';await DB.put('tasks',t);await refresh()},
+ toggle:async b=>{const t=find(S.tasks,b.dataset.id);t.status=t.status==='concluida'?'pendente':'concluida';t.doneAt=t.status==='concluida'?today():'';await DB.put('tasks',t);await refresh()},
  sub:async b=>{const t=find(S.tasks,b.dataset.id);t.subs[+b.dataset.i].d=b.checked;await DB.put('tasks',t);await refresh()},
  dupTask:async b=>{const t=find(S.tasks,b.dataset.id);await DB.put('tasks',{...t,id:uid(),name:t.name+' (cópia)',status:'pendente',subs:(t.subs||[]).map(s=>({t:s.t,d:false}))});await refresh();toast('Tarefa duplicada.')},
  postpone:async b=>{const t=find(S.tasks,b.dataset.id);t.date=addDays(t.date&&t.date>today()?t.date:today(),1);await DB.put('tasks',t);await refresh();toast('Adiada para '+fmtD(t.date)+'.')},
