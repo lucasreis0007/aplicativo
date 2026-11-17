@@ -23,7 +23,7 @@ const fromMin=m=>pad(Math.floor(m/60))+':'+pad(m%60);
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const find=(a,id)=>a.find(x=>x.id===id);
 const fmtD=s=>{const d=new Date(s+'T12:00');return `${DAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()].slice(0,3)}`};
-const S={tasks:[],events:[],cats:DEFCATS,tab:'home',cal:{mode:'month',date:today()},f:{q:'',st:'todas'}};
+const S={tasks:[],events:[],routines:[],cats:DEFCATS,tab:'home',cal:{mode:'month',date:today()},f:{q:'',st:'todas'}};
 
 /* ---------- tema ---------- */
 const mq=matchMedia('(prefers-color-scheme: dark)');
@@ -33,7 +33,7 @@ mq.addEventListener('change',applyTheme);applyTheme();
 
 /* ---------- dados ---------- */
 async function load(){
- S.tasks=await DB.all('tasks');S.events=await DB.all('events');
+ S.tasks=await DB.all('tasks');S.events=await DB.all('events');S.routines=await DB.all('routines');
  const c=await DB.get('settings','cats');
  if(c)S.cats=c.value;else await DB.put('settings',{key:'cats',value:DEFCATS});
 }
@@ -41,6 +41,7 @@ const isActive=t=>!['concluida','cancelada'].includes(t.status);
 const isLate=t=>isActive(t)&&((t.deadline&&t.deadline<today())||(t.date&&(t.date+'T'+(t.time||'23:59'))<nowIso()));
 const stOf=t=>isLate(t)?'atrasada':t.status;
 const items=d=>[
+ ...S.routines.filter(r=>occurs(r,d)).map(r=>({k:'r',id:r.id,title:r.name,date:d,s:r.start,e:r.dur?fromMin(Math.min(1439,toMin(r.start)+r.dur)):null,cat:r.cat})),
  ...S.events.filter(e=>e.date===d).map(e=>({k:'e',id:e.id,title:e.title,date:d,s:e.start,e:e.end,cat:e.cat})),
  ...S.tasks.filter(t=>t.date===d&&t.status!=='cancelada').map(t=>({k:'t',id:t.id,title:t.name,date:d,s:t.time,
    e:t.time&&t.dur?fromMin(Math.min(1439,toMin(t.time)+ +t.dur)):null,cat:t.cat,done:t.status==='concluida'}))
@@ -56,10 +57,10 @@ function free(d){ // horários livres entre 07:00 e 22:00 (itens com início e f
 /* ---------- UI básica ---------- */
 const sheet=h=>{$('#panel').innerHTML=h;$('#sheet').hidden=false};
 const closeSheet=()=>{$('#sheet').hidden=true};
-let tt;const toast=m=>{const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,2600)};
+let tt;const toast=(m,ms=2600)=>{const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,ms)};
 const catOpts=sel=>Object.entries(S.cats).map(([g,l])=>`<optgroup label="${esc(g)}">${l.map(c=>`<option ${c===sel?'selected':''}>${esc(c)}</option>`).join('')}</optgroup>`).join('');
 const dpre=(it,td)=>it.date===td?'':fmtD(it.date).slice(0,3)+' ';
-const row=(it,td)=>`<div class="card row" data-a="open" data-k="${it.k}" data-id="${it.id}"><div class="t">${td?dpre(it,td):''}${it.s||'—'}</div><div class="grow"><b class="${it.done?'done':''}">${esc(it.title)}</b><div class="meta">${it.k==='e'?'Compromisso':'Tarefa'} · ${esc(it.cat||'')}${it.e?' · até '+it.e:''}</div></div></div>`;
+const row=(it,td)=>`<div class="card row" data-a="open" data-k="${it.k}" data-id="${it.id}"><div class="t">${td?dpre(it,td):''}${it.s||'—'}</div><div class="grow"><b class="${it.done?'done':''}">${esc(it.title)}</b><div class="meta">${it.k==='e'?'Compromisso':it.k==='r'?'Rotina':'Tarefa'} · ${esc(it.cat||'')}${it.e?' · até '+it.e:''}</div></div></div>`;
 
 /* ---------- Início ---------- */
 function home(){
@@ -144,7 +145,7 @@ function meV(){const m=localStorage.getItem('theme')||'auto';
  return `<h1>Perfil</h1><h2>Aparência</h2><div class="seg">${[['light','Claro'],['dark','Escuro'],['auto','Automático']].map(([v,l])=>`<button class="${m===v?'on':''}" data-a="theme" data-v="${v}">${l}</button>`).join('')}</div>
  <h2>Categorias</h2>${Object.entries(S.cats).map(([g,l])=>`<div class="card"><b>${esc(g)}</b><div>${l.map(c=>`<span class="chip">${esc(c)}<b data-a="delCat" data-g="${esc(g)}" data-c="${esc(c)}">×</b></span>`).join('')}</div></div>`).join('')}
  <div class="two"><select id="cg">${Object.keys(S.cats).map(g=>`<option>${esc(g)}</option>`).join('')}</select><input id="cn" placeholder="Nova categoria"></div><button class="btn sec" data-a="addCat">Adicionar categoria</button>
- <h2>Sobre</h2><div class="card meta">Seus dados ficam apenas neste aparelho (IndexedDB). Backup, estudos, metas, relatórios, foco e notificações chegam nas próximas etapas.</div>`}
+ <h2>Sobre</h2><div class="card meta">Seus dados ficam apenas neste aparelho (IndexedDB). Estudos, metas, relatórios, foco e "Organizar meu dia" chegam na próxima etapa.</div>`}
 
 /* ---------- ações ---------- */
 const refresh=async()=>{await load();render()};
@@ -170,7 +171,7 @@ const A={
  postpone:async b=>{const t=find(S.tasks,b.dataset.id);t.date=addDays(t.date&&t.date>today()?t.date:today(),1);await DB.put('tasks',t);await refresh();toast('Adiada para '+fmtD(t.date)+'.')},
  delTask:async b=>{if(confirm('Excluir esta tarefa?')){await DB.del('tasks',b.dataset.id);await refresh()}},
  newEvent:b=>eventForm({},b.dataset.d),
- open:b=>b.dataset.k==='e'?eventForm(find(S.events,b.dataset.id)):taskForm(find(S.tasks,b.dataset.id)),
+ open:b=>{const k=b.dataset.k,id=b.dataset.id;k==='e'?eventForm(find(S.events,id)):k==='r'?routineForm(find(S.routines,id)):taskForm(find(S.tasks,id))},
  saveEvent:async b=>{
   const f=Object.fromEntries(new FormData($('#f')));
   if(!f.title.trim())return toast('Informe o título.');

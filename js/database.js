@@ -17,6 +17,7 @@ const DB=(()=>{
     get:(s,k)=>tx(s,'readonly',o=>o.get(k)),
     put:(s,v)=>tx(s,'readwrite',o=>o.put(v)),
     del:(s,k)=>tx(s,'readwrite',o=>o.delete(k)),
+    clear:s=>tx(s,'readwrite',o=>o.clear()),
     STORES:Object.keys(STORES)
   };
 })();
